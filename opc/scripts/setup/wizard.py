@@ -1025,10 +1025,7 @@ async def run_setup_wizard() -> None:
     console.print("  [bold]tldr --help[/bold]       - See all commands")
     console.print("\nNext steps:")
     console.print("  1. Start Claude Code: [bold]claude[/bold]")
-    console.print(
-        "  2. Monitor agents: [bold]uv run python scripts/agent_monitor_tui/main.py[/bold]"
-    )
-    console.print("  3. View docs: [bold]docs/getting-started.md[/bold]")
+    console.print("  2. View docs: [bold]docs/getting-started.md[/bold]")
 
 
 async def main():
