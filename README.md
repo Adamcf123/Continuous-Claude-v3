@@ -189,6 +189,49 @@ uv run python -m scripts.setup.wizard
 | 10 | TLDR code analysis tool |
 | 11-12 | Diagnostics tools + Loogle (optional) |
 
+### Remote Database Setup
+
+By default, CC-v3 runs PostgreSQL locally via Docker. For remote database setups:
+
+#### 1. Database Preparation
+
+```bash
+# Connect to your remote PostgreSQL instance
+psql -h hostname -U user -d continuous_claude
+
+# Enable pgvector extension (requires superuser or rds_superuser)
+CREATE EXTENSION IF NOT EXISTS vector;
+
+# Apply the schema (from your local clone)
+psql -h hostname -U user -d continuous_claude -f docker/init-schema.sql
+```
+
+> **Managed PostgreSQL tips:**
+> - **AWS RDS**: Add `vector` to `shared_preload_libraries` in DB Parameter Group
+> - **Supabase**: Enable via Database Extensions page
+> - **Azure Database**: Use Extensions pane to enable pgvector
+
+#### 2. Connection Configuration
+
+Set `CONTINUOUS_CLAUDE_DB_URL` in `~/.claude/settings.json`:
+
+```json
+{
+  "env": {
+    "CONTINUOUS_CLAUDE_DB_URL": "postgresql://user:password@hostname:5432/continuous_claude"
+  }
+}
+```
+
+Or export before running Claude:
+
+```bash
+export CONTINUOUS_CLAUDE_DB_URL="postgresql://user:password@hostname:5432/continuous_claude"
+claude
+```
+
+See `.env.example` for all available environment variables.
+
 ### First Session
 
 ```bash

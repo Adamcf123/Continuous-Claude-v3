@@ -460,8 +460,8 @@ def generate_env_file(config: dict[str, Any], env_path: Path) -> None:
             if password:
                 lines.append(f"POSTGRES_PASSWORD={password}")
             lines.append("")
-            lines.append("# Connection string for scripts")
-            lines.append(f"DATABASE_URL=postgresql://{user}:{password}@{host}:{port}/{database}")
+            lines.append("# Connection string for scripts (canonical name)")
+            lines.append(f"CONTINUOUS_CLAUDE_DB_URL=postgresql://{user}:{password}@{host}:{port}/{database}")
         elif mode == "embedded":
             pgdata = db.get("pgdata", "")
             venv = db.get("venv", "")
@@ -469,10 +469,10 @@ def generate_env_file(config: dict[str, Any], env_path: Path) -> None:
             lines.append(f"PGSERVER_VENV={venv}")
             lines.append("")
             lines.append("# Connection string (Unix socket)")
-            lines.append(f"DATABASE_URL=postgresql://postgres:@/postgres?host={pgdata}")
+            lines.append(f"CONTINUOUS_CLAUDE_DB_URL=postgresql://postgres:@/postgres?host={pgdata}")
         else:  # sqlite
-            lines.append("# SQLite mode - no DATABASE_URL needed")
-            lines.append("DATABASE_URL=")
+            lines.append("# SQLite mode - no connection string needed")
+            lines.append("CONTINUOUS_CLAUDE_DB_URL=")
         lines.append("")
 
     # Embedding configuration
