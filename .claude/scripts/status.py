@@ -347,7 +347,7 @@ def get_continuity_info(project_dir: Path) -> tuple[str, str]:
 
 
 def build_output(context_pct: int, token_display: str, git_info: str,
-                 goal: str, now_focus: str) -> str:
+                 goal: str, now_focus: str, pwd: str) -> str:
     """Build the final colored output string."""
     # Build continuity string
     if goal and now_focus:
@@ -364,6 +364,8 @@ def build_output(context_pct: int, token_display: str, git_info: str,
         # CRITICAL - Red warning
         ctx_display = f"\033[31m⚠ {token_display} {context_pct}%\033[0m"
         parts = [ctx_display]
+        if pwd:
+            parts.append(f"📁 {pwd}")
         if git_info:
             parts.append(git_info)
         if now_focus:  # Only show now_focus when critical
@@ -372,6 +374,8 @@ def build_output(context_pct: int, token_display: str, git_info: str,
         # WARNING - Yellow
         ctx_display = f"\033[33m{token_display} {context_pct}%\033[0m"
         parts = [ctx_display]
+        if pwd:
+            parts.append(f"📁 {pwd}")
         if git_info:
             parts.append(git_info)
         if continuity:
@@ -380,6 +384,8 @@ def build_output(context_pct: int, token_display: str, git_info: str,
         # NORMAL - Green
         ctx_display = f"\033[32m{token_display} {context_pct}%\033[0m"
         parts = [ctx_display]
+        if pwd:
+            parts.append(f"📁 {pwd}")
         if git_info:
             parts.append(git_info)
         if continuity:
@@ -446,8 +452,14 @@ def main() -> None:
     # Get continuity info
     goal, now_focus = get_continuity_info(project_dir)
 
+    # Get current directory for display (shortened if in home)
+    pwd_display = str(cwd)
+    home = Path.home()
+    if pwd_display.startswith(str(home)):
+        pwd_display = "~" + pwd_display[len(str(home)):]
+
     # Build and print output
-    output = build_output(context_pct, token_display, git_info, goal, now_focus)
+    output = build_output(context_pct, token_display, git_info, goal, now_focus, pwd_display)
     print(output)
 
 
