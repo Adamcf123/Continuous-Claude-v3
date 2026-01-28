@@ -34,6 +34,95 @@ def get_session_id(data: dict) -> str:
     return os.environ.get("CLAUDE_SESSION_ID", str(os.getppid()))
 
 
+def format_model_label(data: dict) -> str:
+    """Format model ID/display_name into a short label.
+
+    Examples:
+    - claude-3-opus-20240229 -> Opus
+    - claude-3-5-sonnet-20240620 -> Sonnet
+    - gpt-4o -> GPT-4o
+    - gpt-5.2-turbo -> GPT-5.2
+    """
+    model = data.get("model", {})
+    if not model:
+        return ""
+
+    model_id = model.get("id", "")
+    display_name = model.get("display_name", "")
+
+    if not model_id and not display_name:
+        return ""
+
+    # Known patterns
+    if "opus" in model_id.lower():
+        return "Opus"
+    if "sonnet" in model_id.lower():
+        return "Sonnet"
+    if "haiku" in model_id.lower():
+        return "Haiku"
+
+    # GPT models
+    gpt_match = re.search(r"gpt-([\d.a-z]+)", model_id.lower())
+    if gpt_match:
+        return f"GPT-{gpt_match.group(1)}"
+
+    # Kimi models
+    if "kimi" in model_id.lower():
+        return "Kimi"
+
+    # Fallback to first two words of display name if it looks like a custom label
+    if display_name:
+        parts = display_name.split()
+        if len(parts) >= 2:
+            return f"{parts[0]} {parts[1]}"
+        return parts[0]
+
+    return model_id.split("-")[0].capitalize()
+
+
+def get_context_from_transcript(transcript_path: str) -> tuple[int, int, int] | None:
+    """Read transcript JSONL to get most recent usage data.
+
+    Claude Code doesn't populate current_usage for non-Claude models (GPT, Kimi, etc).
+    This function reads the transcript file directly to get accurate token counts.
+
+    Returns:
+        Tuple of (input_tokens, cache_read, cache_creation) or None if unavailable.
+    """
+    if not transcript_path:
+        return None
+
+    try:
+        path = Path(transcript_path)
+        if not path.exists():
+            return None
+
+        # Read file and parse JSONL (each line is a JSON object)
+        lines = path.read_text(encoding="utf-8").strip().split("\n")
+
+        # Search from end for most recent entry with usage data
+        for line in reversed(lines):
+            if not line.strip():
+                continue
+            try:
+                entry = json.loads(line)
+                # Look for message.usage structure (API response format)
+                message = entry.get("message", {})
+                usage = message.get("usage", {})
+                input_tokens = usage.get("input_tokens", 0)
+
+                if input_tokens > 0:
+                    cache_read = usage.get("cache_read_input_tokens", 0) or 0
+                    cache_creation = usage.get("cache_creation_input_tokens", 0) or 0
+                    return (input_tokens, cache_read, cache_creation)
+            except json.JSONDecodeError:
+                continue
+
+        return None
+    except OSError:
+        return None
+
+
 def get_context_info(data: dict) -> tuple[int, int, str]:
     """Extract token usage and calculate context percentage.
 
@@ -47,10 +136,32 @@ def get_context_info(data: dict) -> tuple[int, int, str]:
     cache_read = usage.get("cache_read_input_tokens", 0) or 0
     cache_creation = usage.get("cache_creation_input_tokens", 0) or 0
 
+    # Some non-Claude models don't populate current_usage; read transcript directly.
+    if input_tokens == 0 and cache_read == 0 and cache_creation == 0:
+        transcript_path = data.get("transcript_path", "")
+        transcript_usage = get_context_from_transcript(transcript_path)
+        if transcript_usage:
+            input_tokens, cache_read, cache_creation = transcript_usage
+
+    if input_tokens == 0 and cache_read == 0 and cache_creation == 0:
+        return 0, 0, "?"
+
     system_overhead = 45000
     total_tokens = input_tokens + cache_read + cache_creation + system_overhead
 
-    context_size = ctx.get("context_window_size", 200000) or 200000
+    context_size = ctx.get("context_window_size") or 0
+    if not context_size:
+        # Claude Code doesn't always populate context_window_size for non-Claude models.
+        model_id = (data.get("model", {}) or {}).get("id", "").lower()
+        if "kimi" in model_id:
+            context_size = 256000
+        elif "gemini" in model_id:
+            context_size = 500000
+        elif "gpt-" in model_id:
+            context_size = 272000
+        else:
+            context_size = 200000
+
     context_pct = min(100, total_tokens * 100 // context_size)
 
     # Format as K with one decimal
@@ -347,7 +458,7 @@ def get_continuity_info(project_dir: Path) -> tuple[str, str]:
 
 
 def build_output(context_pct: int, token_display: str, git_info: str,
-                 goal: str, now_focus: str, pwd: str) -> str:
+                 goal: str, now_focus: str, pwd: str, model_label: str = "") -> str:
     """Build the final colored output string."""
     # Build continuity string
     if goal and now_focus:
@@ -390,6 +501,10 @@ def build_output(context_pct: int, token_display: str, git_info: str,
             parts.append(git_info)
         if continuity:
             parts.append(continuity)
+
+    # Append model label if present
+    if model_label:
+        parts.append(f"\033[90m{model_label}\033[0m")
 
     return " | ".join(parts)
 
@@ -452,6 +567,9 @@ def main() -> None:
     # Get continuity info
     goal, now_focus = get_continuity_info(project_dir)
 
+    # Get model label
+    model_label = format_model_label(data)
+
     # Get current directory for display (shortened if in home)
     pwd_display = str(cwd)
     home = Path.home()
@@ -459,7 +577,7 @@ def main() -> None:
         pwd_display = "~" + pwd_display[len(str(home)):]
 
     # Build and print output
-    output = build_output(context_pct, token_display, git_info, goal, now_focus, pwd_display)
+    output = build_output(context_pct, token_display, git_info, goal, now_focus, pwd_display, model_label)
     print(output)
 
 
