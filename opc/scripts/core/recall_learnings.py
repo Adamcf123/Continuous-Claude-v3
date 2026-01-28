@@ -570,9 +570,9 @@ async def main() -> int:
     )
     parser.add_argument(
         "--provider",
-        choices=["local", "voyage"],
-        default="local",
-        help="Embedding provider (default: local)",
+        choices=["local", "voyage", "openai"],
+        default=os.environ.get("EMBEDDING_PROVIDER", "local"),
+        help="Embedding provider (default: from EMBEDDING_PROVIDER env var or 'local')",
     )
     parser.add_argument(
         "--json",

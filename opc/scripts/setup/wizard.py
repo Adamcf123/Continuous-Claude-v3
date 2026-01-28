@@ -381,13 +381,14 @@ async def prompt_embedding_config() -> dict[str, str]:
     """Prompt user for embedding provider configuration.
 
     Returns:
-        dict with keys: provider, host (if ollama), model (if ollama)
+        dict with keys: provider, host (if ollama), model (if ollama),
+        base_url/api_key/model/dim (if openai)
     """
     console.print("  [dim]Embeddings power semantic search for learnings recall.[/dim]")
     console.print("  Options:")
     console.print("    1. local - sentence-transformers (downloads ~1.3GB model)")
     console.print("    2. ollama - Use Ollama server (fast, recommended if you have Ollama)")
-    console.print("    3. openai - OpenAI API (requires API key)")
+    console.print("    3. openai - OpenAI API or compatible (Gitee AI, etc.)")
     console.print("    4. voyage - Voyage AI API (requires API key)")
 
     provider = Prompt.ask("Embedding provider", choices=["local", "ollama", "openai", "voyage"], default="local")
@@ -399,6 +400,17 @@ async def prompt_embedding_config() -> dict[str, str]:
         model = Prompt.ask("Ollama embedding model", default="nomic-embed-text")
         config["host"] = host
         config["model"] = model
+    elif provider == "openai":
+        base_url = Prompt.ask("OpenAI-compatible base URL", default="https://api.openai.com/v1")
+        api_key = Prompt.ask("API key")
+        model = Prompt.ask("Embedding model", default="text-embedding-3-small")
+        dim = Prompt.ask("Embedding dimension", default="1536")
+        send_dim = Confirm.ask("Send dimension in request?", default=False)
+        config["base_url"] = base_url
+        config["api_key"] = api_key
+        config["model"] = model
+        config["dim"] = dim
+        config["send_dim"] = "true" if send_dim else "false"
 
     return config
 
@@ -486,6 +498,19 @@ def generate_env_file(config: dict[str, Any], env_path: Path) -> None:
             ollama_model = embeddings.get("model", "nomic-embed-text")
             lines.append(f"OLLAMA_HOST={ollama_host}")
             lines.append(f"OLLAMA_EMBED_MODEL={ollama_model}")
+        elif provider == "openai":
+            lines.append("")
+            lines.append("# OpenAI-compatible embedding configuration")
+            if embeddings.get("base_url"):
+                lines.append(f"OPENAI_BASE_URL={embeddings['base_url']}")
+            if embeddings.get("api_key"):
+                lines.append(f"OPENAI_API_KEY={embeddings['api_key']}")
+            if embeddings.get("model"):
+                lines.append(f"EMBEDDING_MODEL={embeddings['model']}")
+            if embeddings.get("dim"):
+                lines.append(f"EMBEDDING_DIM={embeddings['dim']}")
+            if embeddings.get("send_dim"):
+                lines.append(f"EMBEDDING_SEND_DIM={embeddings['send_dim']}")
         lines.append("")
 
     # API keys (only write non-empty keys)

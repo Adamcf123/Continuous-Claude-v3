@@ -67,17 +67,19 @@ class EmbeddingProvider(ABC):
 
 
 class OpenAIEmbeddingProvider(EmbeddingProvider):
-    """OpenAI text-embedding-3-small provider.
+    """OpenAI-compatible embedding provider.
 
-    Uses the OpenAI embeddings API for generating embeddings.
+    Uses the OpenAI embeddings API or compatible endpoints (e.g., Gitee AI).
     Requires OPENAI_API_KEY environment variable.
 
-    Dimension: 1536 (text-embedding-3-small)
+    Environment variables:
+        OPENAI_API_KEY: API key (required)
+        OPENAI_BASE_URL: Base URL (default: https://api.openai.com/v1)
+        EMBEDDING_MODEL: Model name (default: text-embedding-3-small)
+        EMBEDDING_DIM: Embedding dimension (default: 1536)
+        EMBEDDING_SEND_DIM: Whether to send dimension in request (default: false)
     """
 
-    DIMENSION = 1536
-    MODEL = "text-embedding-3-small"
-    API_URL = "https://api.openai.com/v1/embeddings"
     DEFAULT_MAX_BATCH_SIZE = 100
     DEFAULT_MAX_RETRIES = 3
     RETRY_DELAY = 0.5  # seconds
@@ -88,7 +90,7 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         max_batch_size: int = DEFAULT_MAX_BATCH_SIZE,
         max_retries: int = DEFAULT_MAX_RETRIES,
     ):
-        """Initialize OpenAI embedding provider.
+        """Initialize OpenAI-compatible embedding provider.
 
         Args:
             api_key: OpenAI API key (defaults to OPENAI_API_KEY env var)
@@ -98,6 +100,15 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         self.api_key = api_key or os.environ.get("OPENAI_API_KEY")
         if not self.api_key:
             raise ValueError("OPENAI_API_KEY environment variable required")
+
+        # Configurable base URL for OpenAI-compatible endpoints
+        base_url = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
+        self.api_url = f"{base_url.rstrip('/')}/embeddings"
+
+        # Configurable model and dimension
+        self.model = os.environ.get("EMBEDDING_MODEL", "text-embedding-3-small")
+        self._dimension = int(os.environ.get("EMBEDDING_DIM", "1536"))
+        self.send_dim = os.environ.get("EMBEDDING_SEND_DIM", "").lower() in ("true", "1", "yes")
 
         self.max_batch_size = max_batch_size
         self.max_retries = max_retries
@@ -170,13 +181,17 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
 
         for attempt in range(self.max_retries):
             try:
+                payload = {
+                    "model": self.model,
+                    "input": texts if len(texts) > 1 else texts[0],
+                }
+                if self.send_dim:
+                    payload["dimensions"] = self._dimension
+
                 response = await self._client.post(
-                    self.API_URL,
+                    self.api_url,
                     headers={"Authorization": f"Bearer {self.api_key}"},
-                    json={
-                        "model": self.MODEL,
-                        "input": texts if len(texts) > 1 else texts[0],
-                    },
+                    json=payload,
                 )
                 response.raise_for_status()
                 data = response.json()
@@ -194,8 +209,8 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
 
     @property
     def dimension(self) -> int:
-        """OpenAI text-embedding-3-small dimension."""
-        return self.DIMENSION
+        """Return configured embedding dimension."""
+        return self._dimension
 
 
 class VoyageEmbeddingProvider(EmbeddingProvider):
